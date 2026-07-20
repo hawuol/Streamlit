@@ -1,38 +1,33 @@
 import streamlit as st
-import time
 
-def reset_game():
-    st.session_state.start_time = 0
-    st.session_state.end_time = 0
-    st.session_state.result = 0
+st.markdown("# AI 챗봇 만들기")
+st.markdown("---")
+st.markdown("## 질문을 하시면 AI 친구가 응답합니다.")
+st.header("1. 기본 정보 입력")
+user_id = st.text_input("아이디(ID)를 입력하세요", placeholder="example_user")
+age = st.number_input("나이를 입력하세요", min_value=1, max_value=100, value=17)
+question = st.text_area("AI에게 보낼 질문을 입력하세요", placeholder="여기에 질문을 작성해 주세요.")
 
-if 'start_time' not in st.session_state:
-    reset_game()
+st.header("2. 챗봇 설정")
+ai_model = st.radio("사용할 AI 모델을 선택하세요", ["GPT-4", "Claude 3", "Gemini Pro"], horizontal=True)
+tone = st.selectbox("답변의 말투를 골라주세요", ["친절하게", "냉철하게", "유머러스하게"])
+features = st.multiselect("추가 기능을 선택하세요", ["이미지 생성", "웹 검색", "코드 분석", "번역"])
+creativity = st.slider("AI의 창의성 수준을 설정하세요", 0, 100, 50)
+ai_speed = st.select_slider("응답 처리 속도를 선택하세요",options=["매우 느림", "느림", "보통", "빠름", "실시간"],value="보통")
+agree = st.checkbox("개인정보 수집 및 AI 학습 이용에 동의합니다.")
+st.markdown("---")
 
-st.title("10초 맞추기 게임!")
-st.write("시작 버튼을 누르고, 마음속으로 10초를 센 뒤 종료 버튼을 누르세요.")
-
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("시작"):
-        st.session_state.start_time = time.time() # 현재 시각 기록
-        st.session_state.end_time = 0          # 종료 시간 초기화
-with col2:
-    if st.button("종료"):
-        if st.session_state.start_time != 0:
-            st.session_state.end_time = time.time()
-            # 걸린 시간 계산 (종료 시간 - 시작 시간)
-            st.session_state.result = st.session_state.end_time - st.session_state.start_time
-        else:
-            st.warning("시작 버튼을 먼저 눌러주세요!")
-
-if st.session_state.end_time != 0:
-    diff = st.session_state.result
-    st.header(f"결과: {diff:.2f}초") # 소수점 둘째자리까지 표시
-    # 성공 판정 (9.7초 ~ 10.3초 사이)
-    if 9.7 <= diff <= 10.3:
-        st.success("대단해요! 정확합니다!")
+if st.button("질문 전송하기"):
+    if agree:
+        st.success(f"성공적으로 전송되었습니다! ({user_id}님)")
+        st.markdown(f"""
+        * **질문 내용:** {question}
+        * **선택 모델:** `{ai_model}` | **말투:** `{tone}`
+        * **활성화 기능:** {', '.join(features) if features else '없음'}
+        * **창의성:** `{creativity}%` | **처리 속도:** `{ai_speed}`
+        """)
+        
+        if age < 14:
+            st.info("참고: 14세 미만 사용자이므로 보호자 모드가 활성화됩니다.")
     else:
-        st.error(f"10초와 {abs(10-diff):.2f}초 차이가 납니다. 다시 도전해보세요!")
-
-st.button("다시 하기", on_click=reset_game)
+        st.error("⚠️ 동의 항목에 체크해야 전송이 가능합니다.")
