@@ -4,7 +4,7 @@ from streamlit_local_storage import LocalStorage
 import json
 from openai import OpenAI
 
-ai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY1"])
+ai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 local_storage = LocalStorage()
 
