@@ -1,174 +1,320 @@
 import streamlit as st
+import streamlit.components.v1 as components
+from streamlit_local_storage import LocalStorage
+import json
 from openai import OpenAI
 
-ai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+ai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY1"])
 
-if "acid_type" not in st.session_state:
-    st.session_state.acid_type = "HCl (염산)"
-if "acid_vol" not in st.session_state:
-    st.session_state.acid_vol = 20
-if "base_type" not in st.session_state:
-    st.session_state.base_type = "NaOH (수산화 나트륨)"
-if "base_vol" not in st.session_state:
-    st.session_state.base_vol = 10
-if "indicator" not in st.session_state:
-    st.session_state.indicator = "BTB 용액"
+local_storage = LocalStorage()
 
-@st.dialog("⚙️ 실험 조건 상세 설정")
-def edit_experiment_settings():
-    st.write("기본 산/염기 용액의 종류를 변경합니다.")
-    st.session_state.acid_type = st.selectbox(
-        "산성 용액 선택",
-        ["HCl (염산 - 1가)", "H2SO4 (황산 - 2가)"],
-    )
-    st.session_state.base_type = st.selectbox(
-        "염기성 용액 선택", ["NaOH (수산화 나트륨 - 1가)"]
-    )
-    if st.button("설정 저장"):
-        st.toast("실험 조건이 변경되었습니다!")
+st.title("AI Task Manager")
+
+def pg1():
+    if st.button("전체 제거"):
+        local_storage.setItem("tasks", [])
         st.rerun()
-
-def page_concept():
-    st.header("📣 1. 중화반응 핵심 개념 요약")
-    st.info(
-        f"현재 설정된 용액: **{st.session_state.acid_type}** & **{st.session_state.base_type}**"
+    # 저장된 작업 가져오기
+    tasks = local_storage.getItem("tasks")
+    
+    if tasks is None:
+        tasks = []
+    
+    # 입력
+    task = st.text_input(
+        "앞으로 해야 할 일을 입력하세요",
+        placeholder="여기에 입력해주세요. "
     )
+    
+    # 추가
+    if st.button("추가"):
+        if task:
+            tasks.append(task)
+    
+            data = {
+                "main_goal": task,
+                "tasks": tasks
+            }
+    
+            local_storage.setItem("app_data", data)
+            local_storage.setItem("tasks", tasks)
+    
+            st.success("저장되었습니다.")
+            st.rerun()
+        else:
+            st.warning("할 일을 입력해주세요.")
+    
+    st.subheader("해야 할 일")
+    
+    for i, t in enumerate(tasks):
+        col1, col2 = st.columns([4, 1])
+    
+        with col1:
+            st.write(f"{i+1}. {t}")
+    
+        with col2:
+            if st.button("제거", key=f"remove_{i}"):
+                tasks.pop(i)
+                local_storage.setItem("tasks", tasks)
+                st.rerun()
 
-    if st.button("용액 종류 변경하기"):
-        edit_experiment_settings()
+def pg2():
+    st.title("1-4-7 체계적 목표 설계")
 
-    st.markdown("""
-    ### 💡 핵심 정리
-    * **중화반응**: 산의 $\\text{H}^+$ 이온과 염기의 $\\text{OH}^-$ 이온이 $1:1$ 개수 비로 반응하여 **물($\\text{H}_2\\text{O}$)**과 **열(중화열)**을 발생하는 반응입니다.
-    * **알짜 이온 반응식**: $\\text{H}^+ + \\text{OH}^- \\rightarrow \\text{H}_2\\text{O}$
-    * **지시약의 색 변화 (BTB)**: 산성(노란색) $\\rightarrow$ 중성(초록색) $\\rightarrow$ 염기성(파란색)
-    """)
-    st.markdown("---")
+    # 저장된 tasks 불러오기
+    tasks = local_storage.getItem("tasks")
+    if not tasks:
+        tasks = []
+
+    if not tasks:
+        st.info("먼저 1페이지에서 큰 목표들을 입력해주세요.")
+        return
+
+    st.write("1페이지에 등록된 목표들 중 하나를 선택해 **1-4-7 구조**로 세부 계획을 세워보세요.")
+    
+    # 선택 박스로 어떤 목표를 1-4-7 구조로 짤지 고르기
+    selected_main_goal = st.selectbox("목표 선택", tasks)
+
+    if st.button("1-4-7 구조 생성하기"):
+        with st.spinner("AI가 1-4-7 목표 구조를 분석 및 설계 중입니다..."):
+            response = ai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                response_format={"type": "json_object"},
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """
+                        너는 전문 목표 설계 AI다.
+                        사용자가 선택한 1개의 큰 목표를 바탕으로 '1-4-7 체계'에 맞춰 세부 목표를 구성하라.
+                        
+                        - 1: 큰 목표 (Main Goal)
+                        - 4: 중간 목표 (4개)
+                        - 7: 각각의 중간 목표마다 딸려 있는 작은 실행 목표 (각각 정확히 7개씩, 총 28개 혹은 구조화된 형태)
+                        
+                        반드시 아래 JSON 형식으로만 응답한다.
+                        {
+                          "main_goal": "선택된 큰 목표",
+                          "middle_goals": [
+                            {
+                              "middle_title": "중간 목표 1 제목",
+                              "small_goals": [
+                                "작은 목표 1",
+                                "작은 목표 2",
+                                "작은 목표 3",
+                                "작은 목표 4",
+                                "작은 목표 5",
+                                "작은 목표 6",
+                                "작은 목표 7"
+                              ]
+                            }
+                          ]
+                        }
+                        
+                        중간 목표는 정확히 4개를 만들고, 각 중간 목표 하위의 small_goals는 반드시 7개를 채워라.
+                        설명은 실천 가능한 구체적 행동으로 작성한다.
+                        """
+                    },
+                    {
+                        "role": "user",
+                        "content": selected_main_goal
+                    }
+                ]
+            )
+
+            result = response.choices[0].message.content
+
+            st.session_state["ai_result_147"] = result
+            
+            # pg3에서 사용
+            local_storage.setItem(
+                "goal_plan",
+                json.loads(result)
+            )
+
+    # 저장된 결과 렌더링
+    if "ai_result_147" in st.session_state:
+        try:
+            result_data = json.loads(st.session_state["ai_result_147"])
+            
+            st.markdown(f"### **[1단계] 큰 목표**: {result_data.get('main_goal', selected_main_goal)}")
+            st.markdown("---")
+
+            middle_goals = result_data.get("middle_goals", [])
+            
+            for m_idx, m_goal in enumerate(middle_goals, 1):
+                with st.container(border=True):
+                    st.markdown(f"#### **[4단계 중 중간 목표 {m_idx}]** {m_goal.get('middle_title', '')}")
+                    
+                    small_goals = m_goal.get("small_goals", [])
+                    
+                    # 7개의 작은 목표를 깔끔하게 리스트 형태로 출력
+                    for s_idx, s_goal in enumerate(small_goals, 1):
+                        st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;ㄴ **{s_idx}.** {s_goal}")
+
+        except json.JSONDecodeError:
+            st.error("JSON 파싱 중 오류가 발생했습니다.")
+            st.text(st.session_state["ai_result_147"])
+def pg3():
+    st.title("AI와 함께 목표 달성하기")
+
+    plan = local_storage.getItem("goal_plan")
+    checked = local_storage.getItem("checked")
+
+    if not plan:
+        st.warning("먼저 2페이지에서 목표 계획을 만들어주세요.")
+        return
+
+    if checked is None:
+        checked = {}
 
 
-def page_lab():
-    st.header("🧪 2. 중화반응 가상 실험실")
+    # 현재 진행 상태 계산
+    total = 0
+    done = 0
+    unfinished = []
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("🔴 산성 용액")
-        st.write(f"종류: **{st.session_state.acid_type}**")
-        st.session_state.acid_vol = st.slider(
-            "산 부피 (mL)", 10, 50, st.session_state.acid_vol
-        )
+    for m_idx, middle in enumerate(plan["middle_goals"]):
+    
+        st.subheader(middle["middle_title"])
+    
+        for s_idx, small in enumerate(middle["small_goals"]):
+    
+            key = f"{m_idx}_{s_idx}"
+    
+            total += 1
+    
+            checked[key] = st.checkbox(
+                small,
+                value=checked.get(key, False),
+                key=f"check_{key}"
+            )
+    
+            if checked[key]:
+                done += 1
+            else:
+                unfinished.append(small)
+    local_storage.setItem(
+    "checked",
+    checked
+)
+    rate = int(done / total * 100) if total else 0
+    st.progress(rate / 100)
+    st.write(f"완료율 : {rate}% ({done}/{total})")
 
-    with col2:
-        st.subheader("🔵 염기성 용액")
-        st.write(f"종류: **{st.session_state.base_type}**")
-        st.session_state.base_vol = st.slider(
-            "추가할 염기 부피 (mL)", 0, 50, st.session_state.base_vol
-        )
+    # -------------------
+    # AI 채팅
+    # -------------------
 
-    st.markdown("---")
-    st.session_state.indicator = st.selectbox(
-        "사용할 지시약 선택",
-        ["BTB 용액", "페놀프탈레인 용액"],
-        key="ind_select",
-    )
+    st.header("AI 코치와 대화하기")
 
-    n_a = 2 if "H2SO4" in st.session_state.acid_type else 1
-    n_b = 1  # NaOH
 
-    h_count = n_a * st.session_state.acid_vol
-    oh_count = n_b * st.session_state.base_vol
+    if "coach_messages" not in st.session_state:
 
-    st.subheader("📊 반응 시뮬레이션 결과")
-    if h_count > oh_count:
-        st.warning("현재 용액: 산성 🔴 (H+ 이온 남음)")
-    elif oh_count > h_count:
-        st.info("현재 용액: 염기성 🔵 (OH- 이온 남음)")
-    else:
-        st.balloons()
-        st.success("🎉 중화점 달성! (H+ 와 OH- 수가 일치하여 완벽한 중성 🟢)")
-
-def page_report():
-    st.header("📈 3. 이온 수 & 반응 분석 리포트")
-
-    n_a = 2 if "H2SO4" in st.session_state.acid_type else 1
-    n_b = 1
-
-    h_moles = n_a * st.session_state.acid_vol
-    oh_moles = n_b * st.session_state.base_vol
-
-    rem_h = max(0, h_moles - oh_moles)
-    rem_oh = max(0, oh_moles - h_moles)
-    cl_ion = h_moles
-    na_ion = oh_moles
-
-    ion_data = {
-        "수소 이온(H+)": rem_h,
-        "수산화 이온(OH-)": rem_oh,
-        "음이온(Cl-/SO42-)": cl_ion,
-        "나트륨 이온(Na+)": na_ion,
-    }
-
-    st.subheader("📊 혼합 용액 내 이온 수 분포")
-    st.bar_chart(ion_data)
-
-    st.markdown("---")
-    if st.button("실험 조건 전체 초기화"):
-        st.session_state.acid_vol = 20
-        st.session_state.base_vol = 10
-        st.rerun()
-
-def page_ai_tutor():
-    st.header("🧐 AI 화학 선생님에게 질문하기")
-
-    if "messages" not in st.session_state:
-        st.session_state.messages = [
+        st.session_state.coach_messages = [
             {
                 "role": "system",
-                "content": "너는 고등학교 통합과학 2 '산·염기와 중화반응' 단원을 친절하게 설명해주는 AI 화학 선생님이야. 학생이 친근하게 느낄 수 있도록 칭찬과 함께 쉬운 예시를 들어 질문에 답해줘.",
+                "content": """
+                너는 사용자의 목표 달성을 돕는 AI 코치다.
+                사용자의 목표와 진행 상황을 보고
+                구체적인 행동 계획과 조언을 제공한다.
+                """
             }
         ]
 
-    for message in st.session_state.messages:
+
+    # 이전 대화 출력
+
+    for message in st.session_state.coach_messages:
+
         if message["role"] != "system":
+
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-    question = st.chat_input("중화반응에 대해 궁금한 점을 질문하세요!")
+
+
+    question = st.chat_input(
+        "목표 달성에 대해 물어보세요"
+    )
+
+
     if question:
-        st.session_state.messages.append({"role": "user", "content": question})
-        with st.chat_message("user"):
-            st.markdown(question)
 
-        with st.chat_message("assistant"):
-            status_context = f"현재 학생의 실험 상황: 산 부피={st.session_state.acid_vol}mL, 염기 부피={st.session_state.base_vol}mL"
-            prompt = st.session_state.messages + [
-                {"role": "system", "content": status_context}
-            ]
-
-            with st.spinner("AI 선생님이 답변을 작성 중입니다...🤔"):
-                try:
-                    response = ai_client.chat.completions.create(
-                        model="gpt-4o-mini", messages=prompt
-                    )
-                    ai_response = response.choices[0].message.content
-                except Exception as e:
-                    ai_response = "API 키 문제로 답변을 불러올 수 없습니다. secrets 설정을 확인해주세요."
-
-                st.markdown(ai_response)
-
-        st.session_state.messages.append(
-            {"role": "assistant", "content": ai_response}
+        st.session_state.coach_messages.append(
+            {
+                "role":"user",
+                "content":question
+            }
         )
 
 
+        with st.chat_message("user"):
+            st.markdown(question)
+
+
+
+        with st.chat_message("assistant"):
+
+            context = f"""
+                    [큰 목표]
+                    {plan["main_goal"]}
+                    
+                    [세부 목표]
+                    {json.dumps(plan["middle_goals"], ensure_ascii=False)}
+                    
+                    [진행 상황]
+                    완료: {done}/{total}
+                    완료율: {rate}%
+                    
+                    [남은 목표]
+                    {json.dumps(unfinished, ensure_ascii=False)}
+                    
+                    [사용자 질문]
+                    {question}
+                    """
+
+
+            with st.spinner("AI 코치가 생각 중...🤔"):
+
+                response = ai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role":"system",
+                            "content":
+                            """
+                            너는 사용자의 목표 달성을 돕는 AI 코치다.
+                            진행 상황을 보고 구체적인 행동 계획,
+                            동기부여, 개선 방법을 알려준다.
+                            """
+                        },
+                        {
+                            "role":"user",
+                            "content":context
+                        }
+                    ]
+                )
+
+                ai_response = response.choices[0].message.content
+
+
+                st.markdown(ai_response)
+
+
+
+        st.session_state.coach_messages.append(
+            {
+                "role":"assistant",
+                "content":ai_response
+            }
+        )
 pg = st.navigation(
     [
-        st.Page(page_concept, title="개념 정리", icon="📣"),
-        st.Page(page_lab, title="가상 실험실", icon="🧪"),
-        st.Page(page_report, title="이온 분석", icon="📈"),
-        st.Page(page_ai_tutor, title="AI 화학 튜터", icon="🧐"),
+        st.Page(pg1, title="앞으로 해야할 큰 목표"),
+        st.Page(pg2, title="AI가 짜주는 1-4-7 세부 목표"),
+        st.Page(pg3, title="AI와 얘기하며 목표 달성")
     ],
-    position="top",
+    position="top"
 )
 
-st.title("🔬 통합과학 2: 중화반응 탐구 플래너")
 pg.run()
