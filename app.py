@@ -1,115 +1,95 @@
 import streamlit as st
-
 from openai import OpenAI
+
 ai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-if 'todo_list' not in st.session_state:
-    st.session_state.todo_list = []
-if 'user_motto' not in st.session_state:
-    st.session_state.user_motto = "오늘도 화이팅!"
-if 'motto_updated' not in st.session_state:
-    st.session_state.motto_updated = False
+# 선택한 화학 물질 저장
+if "chemical" not in st.session_state:
+    st.session_state.chemical = "물"
 
-def add_todo():
-    task = st.session_state.todo_input
-    if task:
-        st.session_state.todo_list.append([task, False])
-        st.toast("할 일이 추가되었습니다!")
-        st.session_state.todo_input = ""
+st.title("🧪 AI 화학 물질 설명기")
 
-@st.dialog("오늘의 다짐 수정")
-def edit_motto():
-    motto = st.text_input("나의 한 줄 좌우명을 적어주세요.")
-    if st.button("다짐 저장"):
-        st.session_state.user_motto = motto
-        st.session_state.motto_updated = True
-        st.rerun()
+# 화학 물질 선택
+chemical = st.selectbox(
+    "화학 물질을 선택하세요.", ["물", "에탄올", "아세톤", "포도당", "암모니아"], key="chemical")
 
-def page_motto():
-    st.header("📣 1. 오늘의 다짐")
-    st.info(f"현재 다짐: {st.session_state.user_motto}")
-    if st.button("다짐 수정하기"):
-        edit_motto()
-    if st.session_state.motto_updated:
-        st.success("새로운 좌우명이 등록되었습니다!")
-        st.session_state.motto_updated = False
-    st.markdown("---")
 
-def page_todo():
-    st.header("✅ 2. 오늘의 할 일")
-    st.write(f"현재 다짐: **{st.session_state.user_motto}**")
-    new_todo = st.text_input("추가할 할 일을 입력하세요", key="todo_input")
-    st.button("추가하기", on_click=add_todo)
-    if new_todo == "":
-        st.warning("할 일을 입력하고 버튼을 눌러주세요!")
-    
-    st.markdown("---")
-    for i in range(len(st.session_state.todo_list)):
-        col_task, col_btn, col_status = st.columns([4, 1, 1])
-        with col_task:
-            st.write(f"{i+1}. {st.session_state.todo_list[i][0]}")
-        with col_btn:
-            if st.button("완료", key=f"btn_{i}"):
-                st.session_state.todo_list[i][1] = True
-                st.rerun()
-        with col_status:
-            if st.session_state.todo_list[i][1]:
-                st.write("✅ **달성!**")
-    st.markdown("---")
+# AI 설명
+if st.button("AI 설명 보기"):
 
-def page_report():
-    st.header("📈 3. 나의 갓생 지수")
-    if not st.session_state.todo_list:
-        st.write("아직 등록된 할 일이 없습니다.")
-    else:
-        total = len(st.session_state.todo_list)
-        count = 0
-        for item in st.session_state.todo_list:
-            if item[1] == True:
-                count += 1
-        progress = (count / total) * 100
-        st.metric("오늘의 달성률", f"{progress:.1f}%")
-        st.progress(progress / 100)
-        if progress == 100:
+    prompt = f"""
+    {chemical}에 대해 고등학생이 이해하기 쉽게 설명해줘.
+
+    아래 내용을 포함해줘.
+    1. 어떤 물질인지
+    2. 분자식
+    3. 어디에 사용하는지
+    4. 위험성
+    """
+
+    response = ai_client.chat.completions.create(
+        model="gpt-5.4-mini",
+        messages=[{"role": "user", "content": prompt}])
+           
+    with st.container(border=True):
+        st.subheader(f"🧪 {chemical}")
+        st.write(response.choices[0].message.content)
+
+# 추가 질문
+with st.expander("AI에게 더 질문하기"):
+
+    question = st.text_input("궁금한 점을 입력하세요.")
+
+    if st.button("질문하기"):
+
+        response = ai_client.chat.completions.create(
+            model="gpt-5.4-mini",
+            messages=[{"role": "system", "content": "너는 친절한 화학 선생님이다."}, {"role": "user","content": f"{chemical}에 대해 질문: {question}"}])
+          
+
+        st.write(response.choices[0].message.content)
+st.markdown("---")
+st.header("📝 화학 퀴즈")
+
+if st.button("퀴즈 만들기"):
+
+    prompt = f"""
+    {chemical}에 관한 객관식 문제를 만들어줘.
+
+    형식은 아래처럼 만들어.
+
+    문제 :
+    ①
+    ②
+    ③
+    ④
+
+    마지막 줄에는
+    정답: 번호
+    만 적어줘.
+    """
+
+    response = ai_client.chat.completions.create(
+        model="gpt-5.4-mini",
+        messages=[{"role":"user","content":prompt}])
+            
+    quiz = response.choices[0].message.content
+
+    st.session_state.quiz = quiz
+
+# 퀴즈가 만들어졌으면 출력
+if "quiz" in st.session_state:
+
+    st.write(st.session_state.quiz.split("정답:")[0])
+
+    answer = st.radio("정답을 선택하세요.", ["①", "②", "③", "④"])
+
+    if st.button("채점하기"):
+
+        correct = st.session_state.quiz.split("정답:")[1].strip()
+
+        if answer == correct:
+            st.success("🎉 정답입니다!")
             st.balloons()
-            st.success("모든 목표를 달성하셨습니다! 🏆")
-        if st.button("기록 전체 초기화"):
-            st.session_state.todo_list = []
-            st.rerun()
-
-def page_ai_coach():
-    st.header("🧐 AI 코치와 대화하기")
-    if "messages" not in st.session_state:
-        st.session_state.messages = [
-            {"role": "system", "content": "너는 사용자의 할 일 목록과 달성 정도를 분석하여 조언하는 열정적인 코치야. 사용자가 더 멋진 삶을 살 수 있도록 명확한 조언과 응원해줘."}
-        ]
-        
-    for message in st.session_state.messages:
-        if message["role"] != "system":
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-                
-    question = st.chat_input("질문을 입력하세요")
-    if question:
-        st.session_state.messages.append({"role": "user", "content": question})
-        with st.chat_message("user"):
-            st.markdown(question)
-        with st.chat_message("assistant"):
-            status_context = f"현재 나의 할 일과 달성 여부: {st.session_state.todo_list}"
-            prompt = st.session_state.messages + [{"role": "system", "content": status_context}]
-            with st.spinner("AI 코치가 생각 중...🤔"):
-                response = ai_client.chat.completions.create(
-                    model="gpt-5.4-mini",
-                    messages=prompt)
-                ai_response = response.choices[0].message.content
-                st.markdown(ai_response)
-        st.session_state.messages.append({"role": "assistant", "content": ai_response})
-
-pg = st.navigation([
-    st.Page(page_motto, title="오늘의 다짐", icon="📣"),
-    st.Page(page_todo, title="오늘의 할 일", icon="✅"),
-    st.Page(page_report, title="나의 갓생 지수", icon="📈"),
-    st.Page(page_ai_coach, title="AI 코칭", icon="🧐")], position="top")
-
-st.title("🌱 갓생 살기 플래너")
-pg.run()
+        else:
+            st.error(f"❌ 틀렸습니다. 정답은 {correct}입니다.")
